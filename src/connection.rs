@@ -18,7 +18,7 @@ use std::io::{self, Read, Write};
 use std::ops::Deref;
 use std::sync::Arc;
 
-const IO_BUF_SIZE: usize = 4096 * 16;
+const IO_BUF_SIZE: usize = 4096 * 2;
 
 pub enum RefOrValue<'a, T> {
     Ref(&'a T),
@@ -85,7 +85,7 @@ impl Drop for Connection {
 #[inline]
 pub(crate) fn reserve_buf(buf: &mut BytesMut) {
     let rem = buf.capacity() - buf.len();
-    if rem < 1024 {
+    if rem < 512 {
         buf.reserve(IO_BUF_SIZE - rem);
     }
 }
@@ -235,7 +235,7 @@ fn connection_loop(
 ) -> Result<(), Error> {
     let mut read_buf = BytesMut::with_capacity(IO_BUF_SIZE);
     let mut write_buf = BytesMut::with_capacity(IO_BUF_SIZE);
-    let mut rsp_queue = VecDeque::with_capacity(1000);
+    let mut rsp_queue = VecDeque::with_capacity(512);
 
     let mut io_events = 1; // allow read
     loop {

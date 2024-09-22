@@ -490,8 +490,8 @@ impl Client {
     {
         let buf = unsafe { &mut *self.buf.get() };
         let rem = buf.capacity() - buf.len();
-        if rem < 1024 {
-            buf.reserve(4096 * 16 - rem);
+        if rem < 512 {
+            buf.reserve(4096 * 4 - rem);
         }
         f(buf)
     }
