@@ -25,7 +25,7 @@ pub enum RefOrValue<'a, T> {
     Value(T),
 }
 
-impl<'a, T> Deref for RefOrValue<'a, T> {
+impl<T> Deref for RefOrValue<'_, T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &Self::Target {
