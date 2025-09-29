@@ -11,31 +11,31 @@ mod private {
 /// This trait is "sealed", and cannot be implemented outside of this crate.
 pub trait GenericClient: private::Sealed {
     /// Like `Client::execute`.
-    fn execute<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
 
     /// Like `Client::execute_raw`.
-    fn execute_raw<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute_raw<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
     /// Like `Client::query`.
-    fn query<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<Vec<Row>, Error>
+    fn query<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<Vec<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
 
     /// Like `Client::query_one`.
-    fn query_one<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Row, Error>
+    fn query_one<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Row, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
 
     /// Like `Client::query_opt`.
-    fn query_opt<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Option<Row>, Error>
+    fn query_opt<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Option<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
 
     /// Like `Client::query_raw`.
-    fn query_raw<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<RowStream, Error>
+    fn query_raw<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<RowStream, Error>
     where
         T: ?Sized + ToStatement + Sync + Send;
 
@@ -52,42 +52,42 @@ pub trait GenericClient: private::Sealed {
 impl private::Sealed for Client {}
 
 impl GenericClient for Client {
-    fn execute<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.execute(query, params)
     }
 
-    fn execute_raw<'b, T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute_raw<'b, T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.execute_raw(statement, params)
     }
 
-    fn query<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<Vec<Row>, Error>
+    fn query<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<Vec<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query(query, params)
     }
 
-    fn query_one<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Row, Error>
+    fn query_one<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Row, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query_one(statement, params)
     }
 
-    fn query_opt<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Option<Row>, Error>
+    fn query_opt<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Option<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query_opt(statement, params)
     }
 
-    fn query_raw<'b, T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<RowStream, Error>
+    fn query_raw<'b, T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<RowStream, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
@@ -110,42 +110,42 @@ impl GenericClient for Client {
 impl private::Sealed for Transaction<'_> {}
 
 impl GenericClient for Transaction<'_> {
-    fn execute<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.execute(query, params)
     }
 
-    fn execute_raw<'b, T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    fn execute_raw<'b, T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.execute_raw(statement, params)
     }
 
-    fn query<T>(&self, query: &T, params: &[&(dyn ToSql)]) -> Result<Vec<Row>, Error>
+    fn query<T>(&self, query: &T, params: &[&dyn ToSql]) -> Result<Vec<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query(query, params)
     }
 
-    fn query_one<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Row, Error>
+    fn query_one<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Row, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query_one(statement, params)
     }
 
-    fn query_opt<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Option<Row>, Error>
+    fn query_opt<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Option<Row>, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {
         self.query_opt(statement, params)
     }
 
-    fn query_raw<'b, T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<RowStream, Error>
+    fn query_raw<'b, T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<RowStream, Error>
     where
         T: ?Sized + ToStatement + Sync + Send,
     {

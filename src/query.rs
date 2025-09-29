@@ -10,7 +10,7 @@ use postgres_protocol::message::frontend;
 pub fn query(
     client: &Client,
     statement: Statement,
-    params: &[&(dyn ToSql)],
+    params: &[&dyn ToSql],
 ) -> Result<RowStream, Error> {
     let buf = encode(client, &statement, params)?;
     let responses = start(client, buf)?;
@@ -35,11 +35,7 @@ pub fn query_portal(client: &Client, portal: &Portal, max_rows: i32) -> Result<R
     })
 }
 
-pub fn execute(
-    client: &Client,
-    statement: Statement,
-    params: &[&(dyn ToSql)],
-) -> Result<u64, Error> {
+pub fn execute(client: &Client, statement: Statement, params: &[&dyn ToSql]) -> Result<u64, Error> {
     let buf = encode(client, &statement, params)?;
     let mut responses = start(client, buf)?;
 
@@ -73,7 +69,7 @@ fn start(client: &Client, buf: BytesMut) -> Result<Responses, Error> {
 pub fn encode(
     client: &Client,
     statement: &Statement,
-    params: &[&(dyn ToSql)],
+    params: &[&dyn ToSql],
 ) -> Result<BytesMut, Error> {
     client.with_buf(|buf| {
         encode_bind(statement, params, "", buf)?;
@@ -86,7 +82,7 @@ pub fn encode(
 #[inline]
 pub fn encode_bind(
     statement: &Statement,
-    params: &[&(dyn ToSql)],
+    params: &[&dyn ToSql],
     portal: &str,
     buf: &mut BytesMut,
 ) -> Result<(), Error> {

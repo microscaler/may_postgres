@@ -236,7 +236,7 @@ impl Client {
     /// # Panics
     ///
     /// Panics if the number of parameters provided does not match the number expected.
-    pub fn query<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Vec<Row>, Error>
+    pub fn query<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Vec<Row>, Error>
     where
         T: ?Sized + ToStatement,
     {
@@ -257,7 +257,7 @@ impl Client {
     /// # Panics
     ///
     /// Panics if the number of parameters provided does not match the number expected.
-    pub fn query_one<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Row, Error>
+    pub fn query_one<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Row, Error>
     where
         T: ?Sized + ToStatement,
     {
@@ -289,7 +289,7 @@ impl Client {
     /// # Panics
     ///
     /// Panics if the number of parameters provided does not match the number expected.
-    pub fn query_opt<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<Option<Row>, Error>
+    pub fn query_opt<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<Option<Row>, Error>
     where
         T: ?Sized + ToStatement,
     {
@@ -321,7 +321,7 @@ impl Client {
     /// Panics if the number of parameters provided does not match the number expected.
     ///
     /// [`query`]: #method.query
-    pub fn query_raw<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<RowStream, Error>
+    pub fn query_raw<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<RowStream, Error>
     where
         T: ?Sized + ToStatement,
     {
@@ -343,7 +343,7 @@ impl Client {
     /// # Panics
     ///
     /// Panics if the number of parameters provided does not match the number expected.
-    pub fn execute<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    pub fn execute<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement,
     {
@@ -364,7 +364,7 @@ impl Client {
     /// Panics if the number of parameters provided does not match the number expected.
     ///
     /// [`execute`]: #method.execute
-    pub fn execute_raw<T>(&self, statement: &T, params: &[&(dyn ToSql)]) -> Result<u64, Error>
+    pub fn execute_raw<T>(&self, statement: &T, params: &[&dyn ToSql]) -> Result<u64, Error>
     where
         T: ?Sized + ToStatement,
     {
