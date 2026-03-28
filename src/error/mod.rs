@@ -513,4 +513,13 @@ impl Error {
     pub fn __private_api_timeout() -> Error {
         Error::new(Kind::Timeout, None)
     }
+
+    /// Application-level failure converting a successfully-read column value (e.g. malformed JSON
+    /// in a `TEXT` / `JSON` column). Surfaced as [`Kind::FromSql`] for `column_index`.
+    pub fn user_column_decode_failed(column_index: usize, message: String) -> Error {
+        Error::from_sql(
+            Box::new(io::Error::new(io::ErrorKind::InvalidData, message)),
+            column_index,
+        )
+    }
 }

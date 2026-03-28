@@ -1,4 +1,4 @@
-use chrono_04::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use ::chrono_04::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use may_postgres::types::{Date, Timestamp};
 
 use crate::types::test_type;
