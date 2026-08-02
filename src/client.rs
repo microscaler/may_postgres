@@ -7,8 +7,9 @@ use crate::query::RowStream;
 use crate::simple_query::SimpleQueryStream;
 use crate::types::{Oid, ToSql, Type};
 use crate::{
-    copy_in, copy_out, prepare, query, simple_query, CancelToken, CopyInSink, Error, Row,
-    SimpleQueryMessage, Statement, ToStatement, Transaction, TransactionBuilder, Notification,};
+    copy_in, copy_out, prepare, query, simple_query, CancelToken, CopyInSink, Error, Notification,
+    Row, SimpleQueryMessage, Statement, ToStatement, Transaction, TransactionBuilder,
+};
 use bytes::{Buf, BytesMut};
 use fallible_iterator::FallibleIterator;
 use may::sync::spsc;

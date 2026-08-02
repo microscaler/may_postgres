@@ -256,7 +256,9 @@ fn connection_is_reusable_after_a_copy() {
             assert_eq!(row.get::<_, i32>(0), expected);
         }
 
-        let row = client.query_one("SELECT count(*) FROM reuse_copy", &[]).unwrap();
+        let row = client
+            .query_one("SELECT count(*) FROM reuse_copy", &[])
+            .unwrap();
         assert_eq!(row.get::<_, i64>(0), 1);
     });
 }
@@ -277,7 +279,10 @@ fn an_empty_copy_completes() {
             .copy_in("COPY empty_copy (id) FROM STDIN BINARY")
             .unwrap();
         let writer = BinaryCopyInWriter::new(sink, &[Type::INT4]);
-        let rows_written = { let mut w = writer; w.finish().unwrap() };
+        let rows_written = {
+            let mut w = writer;
+            w.finish().unwrap()
+        };
 
         assert_eq!(rows_written, 0, "an empty copy inserts nothing");
     });

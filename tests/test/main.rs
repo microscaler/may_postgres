@@ -623,7 +623,8 @@ fn only_subscribed_channels_are_queued() {
         )
         .unwrap();
 
-    let notification = wait_for_notification(&client).expect("the subscribed channel should arrive");
+    let notification =
+        wait_for_notification(&client).expect("the subscribed channel should arrive");
     assert_eq!(notification.channel(), "wanted_channel");
     assert_eq!(notification.payload(), "kept");
     assert!(
