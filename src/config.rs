@@ -48,8 +48,10 @@ pub(crate) enum Host {
 /// * `dbname` - The name of the database to connect to. Defaults to the username.
 /// * `options` - Command line options used to configure the server.
 /// * `application_name` - Sets the `application_name` parameter on the server.
-/// * `sslmode` - Controls usage of TLS. If set to `disable`, TLS will not be used. If set to `prefer`, TLS will be used
-///   if available, but not used otherwise. If set to `require`, TLS will be forced to be used. Defaults to `prefer`.
+/// * `sslmode` - This coroutine port does not implement TLS. The explicit value
+///   `disable` is accepted for compatibility with standard PostgreSQL
+///   connection strings; all other values are rejected rather than silently
+///   downgrading the connection.
 /// * `host` - The host to connect to. On Unix platforms, if the host starts with a `/` character it is treated as the
 ///   path to the directory containing Unix domain sockets. Otherwise, it is treated as a hostname. Multiple hosts
 ///   can be specified, separated by commas. Each host will be tried in turn when connecting. Required if connecting
@@ -276,6 +278,11 @@ impl Config {
             }
             "application_name" => {
                 self.application_name(value);
+            }
+            "sslmode" => {
+                if value != "disable" {
+                    return Err(Error::config_parse(Box::new(InvalidValue("sslmode"))));
+                }
             }
             "host" => {
                 for host in value.split(',') {

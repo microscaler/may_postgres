@@ -28,7 +28,7 @@ fn pairs_ws() {
 #[test]
 fn settings() {
     check(
-        "connect_timeout=3 keepalives=0 keepalives_idle=30 target_session_attrs=read-write",
+        "connect_timeout=3 keepalives=0 keepalives_idle=30 sslmode=disable target_session_attrs=read-write",
         Config::new()
             .connect_timeout(Duration::from_secs(3))
             .keepalives(false)
@@ -65,7 +65,7 @@ fn url() {
             .port(5432),
     );
     check(
-        "postgresql://other@localhost/otherdb?connect_timeout=10&application_name=myapp",
+        "postgresql://other@localhost/otherdb?connect_timeout=10&application_name=myapp&sslmode=disable",
         Config::new()
             .user("other")
             .host("localhost")
@@ -118,4 +118,15 @@ fn url() {
             .port(5432)
             .dbname("dbname"),
     )
+}
+
+#[test]
+fn unsupported_ssl_modes_are_rejected() {
+    for mode in ["prefer", "require", "verify-ca", "verify-full", "invalid"] {
+        let url = format!("postgresql://localhost/postgres?sslmode={mode}");
+        assert!(
+            url.parse::<Config>().is_err(),
+            "TLS mode {mode} must not silently downgrade to a plaintext connection"
+        );
+    }
 }
