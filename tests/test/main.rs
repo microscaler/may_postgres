@@ -815,5 +815,8 @@ fn dropping_a_client_closes_the_server_backend() {
     }
 
     let after = backends();
-    assert_eq!(after, 0, "{after} dropped client(s) left their backend open");
+    assert_eq!(
+        after, 0,
+        "{after} dropped client(s) left their backend open"
+    );
 }

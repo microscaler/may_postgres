@@ -49,7 +49,11 @@ fn main() {
             assert_eq!(rows.len(), 1);
             drop(client);
         }
-        std::thread::sleep(std::time::Duration::from_millis(if verbose { 300 } else { 5 }));
+        std::thread::sleep(std::time::Duration::from_millis(if verbose {
+            300
+        } else {
+            5
+        }));
         if !verbose && i % 100 != 0 {
             continue;
         }
