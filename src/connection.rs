@@ -77,6 +77,31 @@ pub(crate) struct Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        // Close the socket BEFORE cancelling the coroutine.
+        //
+        // `cancel()` stops the coroutine but does not run its destructors, and
+        // the `TcpStream` is owned by the coroutine closure - so cancelling
+        // alone leaves the file descriptor open. The server keeps the backend
+        // alive until the whole process exits, which shows up as a connection
+        // leak: N dropped clients leave N backends in `pg_stat_activity`, and
+        // a long-lived process eventually meets "sorry, too many clients
+        // already".
+        //
+        // Shutting the socket down here releases the backend and also unblocks
+        // the coroutine, which is parked in `wait_io()`.
+        // `self.id` is the socket fd. Borrow it just long enough to shut it
+        // down - ManuallyDrop keeps this handle from closing the descriptor,
+        // which the coroutine's `TcpStream` still owns and will close itself.
+        //
+        // Deliberately NOT `try_clone()`: that dups the fd and registers a
+        // second `IoData` with the reactor for one socket, which corrupts the
+        // heap when both are torn down (observed as `free(): invalid pointer`).
+        {
+            use std::os::fd::FromRawFd;
+            let sock = unsafe { std::net::TcpStream::from_raw_fd(self.id as i32) };
+            let sock = std::mem::ManuallyDrop::new(sock);
+            let _ = sock.shutdown(std::net::Shutdown::Both);
+        }
         let rx = self.io_handle.coroutine();
         unsafe { rx.cancel() };
     }
