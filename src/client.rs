@@ -22,10 +22,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::connection::ResponseResult;
+
 pub struct Responses {
     tag: usize,
     cur: BackendMessages,
-    rx: Rc<spsc::Receiver<BackendMessages>>,
+    rx: Rc<spsc::Receiver<ResponseResult>>,
 }
 
 impl Responses {
@@ -36,12 +38,16 @@ impl Responses {
                 Some((_, Message::ErrorResponse(body))) => return Err(Error::db(body)),
                 Some((_, message)) => return Ok(message),
                 None => match self.rx.recv() {
-                    Ok(messages) => {
+                    Ok(Ok(messages)) => {
                         if messages.tag != self.tag {
                             continue;
                         }
                         self.cur = messages
                     }
+                    // The connection I/O loop exited and failed this pending
+                    // request. The error is untagged — the connection is dead,
+                    // every outstanding request on it fails the same way.
+                    Ok(Err(e)) => return Err(e),
                     Err(_) => return Err(Error::closed()),
                 },
             }
@@ -63,12 +69,12 @@ pub struct InnerClient {
 
 struct CoChannel {
     tag: Cell<usize>,
-    rx: Rc<spsc::Receiver<BackendMessages>>,
-    tx: Arc<spsc::Sender<BackendMessages>>,
+    rx: Rc<spsc::Receiver<ResponseResult>>,
+    tx: Arc<spsc::Sender<ResponseResult>>,
 }
 
 impl CoChannel {
-    fn sender(&self) -> Arc<spsc::Sender<BackendMessages>> {
+    fn sender(&self) -> Arc<spsc::Sender<ResponseResult>> {
         // Shared ownership, not a transmuted borrow. The old 'static borrow
         // relied on the client outliving every queued request, which drop
         // breaks - the io coroutine would then push responses through a
@@ -82,7 +88,7 @@ impl CoChannel {
         tag
     }
 
-    fn receiver(&self) -> Rc<spsc::Receiver<BackendMessages>> {
+    fn receiver(&self) -> Rc<spsc::Receiver<ResponseResult>> {
         self.rx.clone()
     }
 }
@@ -521,10 +527,17 @@ impl Client {
 
     /// Determines if the connection to the server has already closed.
     ///
-    /// In that case, all future queries will fail.
+    /// In that case, all future queries will fail — fast, with a
+    /// connection-closed error, rather than blocking. Pool implementations can
+    /// use this to retire a dead client before dispatching work to it.
+    pub fn is_closed(&self) -> bool {
+        self.inner.sender.is_dead()
+    }
+
+    #[doc(hidden)]
+    #[deprecated(note = "use `is_closed`")]
     pub fn _is_closed(&self) -> bool {
-        // self.inner.sender.is_closed()
-        unimplemented!()
+        self.is_closed()
     }
 
     #[inline]
