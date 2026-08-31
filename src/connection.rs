@@ -370,7 +370,25 @@ impl Connection {
         let dead_dup = dead.clone();
         let drain_lock = Arc::new(spin::Mutex::new(()));
         let drain_lock_dup = drain_lock.clone();
-        let io_handle = go!(move || {
+        // EXPLICIT stack for the I/O coroutine. Bare go! inherits the
+        // embedder ambient coroutine stack config, and inside BRRTRouter
+        // that proved fatal: a connection spawned at RUNTIME (lifeguard
+        // max-lifetime rotation, 2026-08-30 market wedge) overflowed its
+        // stack and may killed it WITHOUT unwinding - so the exit path
+        // below (mark dead, fail pending) never ran and every request
+        // into that slot hung forever instead of failing fast. Same class
+        // as the may-redis overflow recorded in PriceWhisperer hot_tier.rs.
+        // 1 MiB: 256 KiB still overflowed once in ~8 rotation cycles under the
+        // compressed-lifetime repro, and stack here is cheap at pool scale.
+        let io_stack: usize = std::env::var("MAY_POSTGRES_IO_STACK")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0x100000);
+        let io_handle = go!(
+            may::coroutine::Builder::new()
+                .name("pg-io".to_owned())
+                .stack_size(io_stack),
+            move || {
             let mut rsp_queue: VecDeque<Response> = VecDeque::with_capacity(512);
             if let Err(e) = connection_loop(
                 &mut stream,
@@ -408,7 +426,9 @@ impl Connection {
         });
 
         Connection {
-            _io_handle: io_handle,
+            // Builder spawn is fallible (stack allocation); a connection we
+            // cannot give a safe stack is a connection we must not hand out.
+            _io_handle: io_handle.expect("spawn pg-io coroutine"),
             req_queue,
             notifications,
             waker,
