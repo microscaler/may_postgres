@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, integration/microscaler-fork]
   pull_request:
 
 env:
