@@ -1,7 +1,7 @@
 use crate::cancel_query;
 use crate::codec::BackendMessages;
 use crate::config::Host;
-use crate::connection::{Connection, RefOrValue, Request, RequestMessages};
+use crate::connection::{Connection, Request, RequestMessages};
 use crate::copy_out::CopyOutStream;
 use crate::query::RowStream;
 use crate::simple_query::SimpleQueryStream;
@@ -22,10 +22,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::connection::ResponseResult;
+
 pub struct Responses {
     tag: usize,
     cur: BackendMessages,
-    rx: Rc<spsc::Receiver<BackendMessages>>,
+    rx: Rc<spsc::Receiver<ResponseResult>>,
 }
 
 impl Responses {
@@ -36,12 +38,16 @@ impl Responses {
                 Some((_, Message::ErrorResponse(body))) => return Err(Error::db(body)),
                 Some((_, message)) => return Ok(message),
                 None => match self.rx.recv() {
-                    Ok(messages) => {
+                    Ok(Ok(messages)) => {
                         if messages.tag != self.tag {
                             continue;
                         }
                         self.cur = messages
                     }
+                    // The connection I/O loop exited and failed this pending
+                    // request. The error is untagged — the connection is dead,
+                    // every outstanding request on it fails the same way.
+                    Ok(Err(e)) => return Err(e),
                     Err(_) => return Err(Error::closed()),
                 },
             }
@@ -63,17 +69,17 @@ pub struct InnerClient {
 
 struct CoChannel {
     tag: Cell<usize>,
-    rx: Rc<spsc::Receiver<BackendMessages>>,
-    tx: spsc::Sender<BackendMessages>,
+    rx: Rc<spsc::Receiver<ResponseResult>>,
+    tx: Arc<spsc::Sender<ResponseResult>>,
 }
 
 impl CoChannel {
-    fn sender(&self) -> RefOrValue<'static, spsc::Sender<BackendMessages>> {
-        // Safety:
-        // 1. there is only one sender
-        // 2. we will wait until all response come back
-        let tx: &'static spsc::Sender<BackendMessages> = unsafe { std::mem::transmute(&self.tx) };
-        RefOrValue::Ref(tx)
+    fn sender(&self) -> Arc<spsc::Sender<ResponseResult>> {
+        // Shared ownership, not a transmuted borrow. The old 'static borrow
+        // relied on the client outliving every queued request, which drop
+        // breaks - the io coroutine would then push responses through a
+        // dangling pointer into freed Client memory.
+        self.tx.clone()
     }
 
     fn tag(&self) -> usize {
@@ -82,7 +88,7 @@ impl CoChannel {
         tag
     }
 
-    fn receiver(&self) -> Rc<spsc::Receiver<BackendMessages>> {
+    fn receiver(&self) -> Rc<spsc::Receiver<ResponseResult>> {
         self.rx.clone()
     }
 }
@@ -91,7 +97,7 @@ impl InnerClient {
     /// ignore the result
     pub fn raw_send(&self, messages: RequestMessages) -> Result<(), Error> {
         let (sender, _rx) = spsc::channel();
-        let request = Request::new(0, messages, RefOrValue::Value(sender));
+        let request = Request::new(0, messages, Arc::new(sender));
         self.sender.send(request);
         Ok(())
     }
@@ -160,7 +166,11 @@ impl Clone for Client {
             let (tx, rx) = spsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel { tag, rx, tx }
+            CoChannel {
+                tag,
+                rx,
+                tx: Arc::new(tx),
+            }
         };
         Client {
             inner: self.inner.clone(),
@@ -182,26 +192,64 @@ impl Client {
     /// so `LISTEN` could be issued but nothing could ever be observed.
     ///
     /// The queue is unbounded and is only drained by the caller, so a client
-    /// that issues `LISTEN` and never reads will grow it without limit. Poll it
-    /// as part of the same loop that does the work:
+    /// that issues `LISTEN` and never reads will grow it without limit. The
+    /// connection fills it as notifications arrive, without any request from
+    /// the client; to wait for the next one rather than poll, use
+    /// [`Client::next_notification`].
+    #[inline]
+    pub fn notifications(&self) -> &may::queue::mpsc::Queue<Notification> {
+        self.inner.sender.notifications().queue()
+    }
+
+    /// Wait up to `timeout` for the next notification.
+    ///
+    /// Returns as soon as one is queued (or immediately if one already is),
+    /// parking the coroutine (or thread) in the meantime, so a `LISTEN`
+    /// consumer needs no polling interval. Returns `None` when `timeout`
+    /// passes with nothing delivered, or when the connection has closed and
+    /// nothing is left in the queue.
     ///
     /// ```no_run
     /// # fn main() -> Result<(), may_postgres::Error> {
+    /// # use std::time::Duration;
     /// let client = may_postgres::connect("host=localhost user=postgres")?;
     /// client.batch_execute("LISTEN my_channel")?;
     ///
-    /// loop {
-    ///     // Any round trip lets the connection surface pending notifications.
-    ///     client.batch_execute("SELECT 1")?;
-    ///     while let Some(notification) = client.notifications().pop() {
-    ///         println!("{}: {}", notification.channel(), notification.payload());
+    /// while !client.is_closed() {
+    ///     if let Some(n) = client.next_notification(Duration::from_secs(1)) {
+    ///         println!("{}: {}", n.channel(), n.payload());
     ///     }
     /// }
+    /// # Ok(())
     /// # }
     /// ```
-    #[inline]
-    pub fn notifications(&self) -> &may::queue::mpsc::Queue<Notification> {
-        self.inner.sender.notifications()
+    pub fn next_notification(&self, timeout: std::time::Duration) -> Option<Notification> {
+        let notifications = self.inner.sender.notifications();
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if let Some(n) = notifications.queue().pop() {
+                return Some(n);
+            }
+            if self.is_closed() {
+                // Pass the wake-up on, so every waiter on this connection
+                // returns rather than one of them.
+                notifications.ready().post();
+                return notifications.queue().pop();
+            }
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return notifications.queue().pop();
+            }
+            // may keeps park timeouts in whole milliseconds, and releases up to
+            // 0.3.51 truncate anything shorter to "no timeout" (the wait would
+            // never return): never ask it for less than 1 ms.
+            let left = left.max(std::time::Duration::from_millis(1));
+            if !notifications.ready().wait_timeout(left) {
+                return notifications.queue().pop();
+            }
+            // A permit can outnumber queued notifications when the queue was
+            // also drained with `notifications().pop()`; loop and re-check.
+        }
     }
 
     pub(crate) fn new(sender: Connection, process_id: i32, secret_key: i32) -> Client {
@@ -209,7 +257,11 @@ impl Client {
             let (tx, rx) = spsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel { tag, rx, tx }
+            CoChannel {
+                tag,
+                rx,
+                tx: Arc::new(tx),
+            }
         };
         Client {
             inner: Arc::new(InnerClient {
@@ -513,10 +565,17 @@ impl Client {
 
     /// Determines if the connection to the server has already closed.
     ///
-    /// In that case, all future queries will fail.
+    /// In that case, all future queries will fail — fast, with a
+    /// connection-closed error, rather than blocking. Pool implementations can
+    /// use this to retire a dead client before dispatching work to it.
+    pub fn is_closed(&self) -> bool {
+        self.inner.sender.is_dead()
+    }
+
+    #[doc(hidden)]
+    #[deprecated(note = "use `is_closed`")]
     pub fn _is_closed(&self) -> bool {
-        // self.inner.sender.is_closed()
-        unimplemented!()
+        self.is_closed()
     }
 
     #[inline]
