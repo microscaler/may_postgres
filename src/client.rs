@@ -140,8 +140,7 @@ pub(crate) struct SocketConfig {
     pub host: Host,
     pub port: u16,
     pub connect_timeout: Option<Duration>,
-    pub keepalives: bool,
-    pub keepalives_idle: Duration,
+    pub socket: crate::connect_socket::SocketOptions,
 }
 
 /// An asynchronous PostgreSQL client.

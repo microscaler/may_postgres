@@ -48,6 +48,8 @@ fallible-iterator = "0.2"
 postgres-protocol = "0.6"
 
 may = { version = "0.3", default-features = false }
+# TCP keepalive idle / interval / retry count (std exposes none of them).
+socket2 = { version = "0.5", features = ["all"] }
 # TLS (sslmode, sslrootcert, sslcert/sslkey). ring: no C toolchain beyond cc, no cmake.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pemfile = "2"
