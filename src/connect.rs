@@ -36,15 +36,10 @@ pub fn connect(config: &Config) -> Result<Client, Error> {
 }
 
 fn connect_once(host: &Host, port: u16, config: &Config) -> Result<Client, Error> {
-    let socket = connect_socket(
-        host,
-        port,
-        config.connect_timeout,
-        config.keepalives,
-        config.keepalives_idle,
-    )?;
+    let socket = connect_socket(host, port, config.connect_timeout, &config.socket_options())?;
 
-    let mut client = connect_raw(socket, config)?;
+    let Host::Tcp(hostname) = host;
+    let mut client = connect_raw(socket, config, Some(hostname))?;
 
     if let TargetSessionAttrs::ReadWrite = config.target_session_attrs {
         let mut rows = client.simple_query_raw("SHOW transaction_read_only")?;
@@ -71,8 +66,7 @@ fn connect_once(host: &Host, port: u16, config: &Config) -> Result<Client, Error
         host: host.clone(),
         port,
         connect_timeout: config.connect_timeout,
-        keepalives: config.keepalives,
-        keepalives_idle: config.keepalives_idle,
+        socket: config.socket_options(),
     });
 
     Ok(client)
