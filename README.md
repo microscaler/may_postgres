@@ -13,6 +13,20 @@ TEST_PG_PORT=5433 cargo nextest run --workspace     # or cargo test --all
 tests/tls/run.sh                                     # TLS tests: two throwaway servers, needs docker
 ```
 
+## Coverage
+
+```sh
+cargo install cargo-llvm-cov            # and: rustup component add llvm-tools-preview
+TEST_PG_PORT=5433 cargo llvm-cov --no-report nextest --workspace
+CARGO_TEST="cargo llvm-cov --no-report test" tests/tls/run.sh
+cargo llvm-cov report --html            # or --lcov, --summary-only
+```
+
+Protocol paths that a real server never takes (authentication methods the client does not
+support, messages out of order, a server that hangs up) are driven by a scripted fake server in
+`tests/test/fake_server.rs`. CI runs everything above against PostgreSQL 17 and fails below
+`COVERAGE_MIN_LINES` of lines; the per-file report goes into the pull request comment.
+
 ## Load tests
 
 `hack/load-test.sh` runs pgbench's built-in workloads (select-only, TPC-B-like, simple-update) twice
