@@ -12,7 +12,7 @@ use crate::{
 };
 use bytes::{Buf, BytesMut};
 use fallible_iterator::FallibleIterator;
-use may::sync::spsc;
+use may::sync::mpsc;
 use postgres_protocol::message::backend::Message;
 use spin::Mutex;
 
@@ -27,7 +27,7 @@ use crate::connection::ResponseResult;
 pub struct Responses {
     tag: usize,
     cur: BackendMessages,
-    rx: Rc<spsc::Receiver<ResponseResult>>,
+    rx: Rc<mpsc::Receiver<ResponseResult>>,
 }
 
 impl Responses {
@@ -69,16 +69,24 @@ pub struct InnerClient {
 
 struct CoChannel {
     tag: Cell<usize>,
-    rx: Rc<spsc::Receiver<ResponseResult>>,
-    tx: Arc<spsc::Sender<ResponseResult>>,
+    rx: Rc<mpsc::Receiver<ResponseResult>>,
+    tx: mpsc::Sender<ResponseResult>,
 }
 
 impl CoChannel {
-    fn sender(&self) -> Arc<spsc::Sender<ResponseResult>> {
+    fn sender(&self) -> mpsc::Sender<ResponseResult> {
         // Shared ownership, not a transmuted borrow. The old 'static borrow
         // relied on the client outliving every queued request, which drop
         // breaks - the io coroutine would then push responses through a
         // dangling pointer into freed Client memory.
+        //
+        // An mpsc channel, not spsc: the io coroutine is not the only
+        // producer. When the connection dies, the coroutine fails in-flight
+        // responses (`fail_pending_responses`) while a caller whose request
+        // lost the race to `dead` fails its own queued request
+        // (`fail_queued_requests`), both on this channel and on different
+        // threads. spsc's push is unsynchronised; may 0.3.52 made its Sender
+        // !Sync, which turned that race into a compile error.
         self.tx.clone()
     }
 
@@ -88,7 +96,7 @@ impl CoChannel {
         tag
     }
 
-    fn receiver(&self) -> Rc<spsc::Receiver<ResponseResult>> {
+    fn receiver(&self) -> Rc<mpsc::Receiver<ResponseResult>> {
         self.rx.clone()
     }
 }
@@ -96,8 +104,8 @@ impl CoChannel {
 impl InnerClient {
     /// ignore the result
     pub fn raw_send(&self, messages: RequestMessages) -> Result<(), Error> {
-        let (sender, _rx) = spsc::channel();
-        let request = Request::new(0, messages, Arc::new(sender));
+        let (sender, _rx) = mpsc::channel();
+        let request = Request::new(0, messages, sender);
         self.sender.send(request);
         Ok(())
     }
@@ -162,14 +170,10 @@ unsafe impl Send for Client {}
 impl Clone for Client {
     fn clone(&self) -> Client {
         let co_ch = {
-            let (tx, rx) = spsc::channel();
+            let (tx, rx) = mpsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel {
-                tag,
-                rx,
-                tx: Arc::new(tx),
-            }
+            CoChannel { tag, rx, tx }
         };
         Client {
             inner: self.inner.clone(),
@@ -253,14 +257,10 @@ impl Client {
 
     pub(crate) fn new(sender: Connection, process_id: i32, secret_key: i32) -> Client {
         let co_ch = {
-            let (tx, rx) = spsc::channel();
+            let (tx, rx) = mpsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel {
-                tag,
-                rx,
-                tx: Arc::new(tx),
-            }
+            CoChannel { tag, rx, tx }
         };
         Client {
             inner: Arc::new(InnerClient {
