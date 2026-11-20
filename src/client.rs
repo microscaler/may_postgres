@@ -173,11 +173,7 @@ impl Clone for Client {
             let (tx, rx) = mpsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel {
-                tag,
-                rx,
-                tx,
-            }
+            CoChannel { tag, rx, tx }
         };
         Client {
             inner: self.inner.clone(),
@@ -264,11 +260,7 @@ impl Client {
             let (tx, rx) = mpsc::channel();
             let rx = Rc::new(rx);
             let tag = Cell::new(0);
-            CoChannel {
-                tag,
-                rx,
-                tx,
-            }
+            CoChannel { tag, rx, tx }
         };
         Client {
             inner: Arc::new(InnerClient {
