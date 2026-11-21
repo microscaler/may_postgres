@@ -3,6 +3,7 @@
 # certificates for `certuser`, one plaintext. Generates its own CAs. Needs docker and openssl.
 #
 #   tests/tls/run.sh            # PG_IMAGE=postgres:17 TLS_PG_PORT=55440 PLAIN_PG_PORT=55441 to override
+#   CARGO_TEST="cargo llvm-cov --no-report test" tests/tls/run.sh   # under coverage
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -52,4 +53,6 @@ sleep 2; ready "$tls_name"; ready "$plain_name"
 docker exec "$tls_name" psql -U postgres -qc "CREATE ROLE pw LOGIN PASSWORD 'pw'; CREATE ROLE certuser LOGIN PASSWORD 'cu'; GRANT pg_read_all_stats TO pw;" >/dev/null
 
 cd "$here"
-TLS_PG_PORT="$TLS_PORT" PLAIN_PG_PORT="$PLAIN_PORT" TLS_TEST_DIR="$dir" cargo test --test tls -- --test-threads=1 "$@"
+# CARGO_TEST swaps the runner, e.g. CARGO_TEST="cargo llvm-cov --no-report test" to collect coverage.
+# shellcheck disable=SC2086 # split on purpose: it is a command and its arguments
+TLS_PG_PORT="$TLS_PORT" PLAIN_PG_PORT="$PLAIN_PORT" TLS_TEST_DIR="$dir" ${CARGO_TEST:-cargo test} --test tls -- --test-threads=1 "$@"

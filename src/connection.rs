@@ -5,7 +5,7 @@ use may::coroutine::JoinHandle;
 use may::go;
 use may::io::{WaitIo, WaitIoWaker};
 use may::queue::mpsc::Queue;
-use may::sync::{spsc, Semphore};
+use may::sync::{mpsc, Semphore};
 use postgres_protocol::message::backend::Message;
 use postgres_protocol::message::frontend;
 
@@ -39,7 +39,7 @@ pub struct Request {
     // the queues after the originating Client is dropped, so a borrow here
     // would dangle into freed Client memory the moment drop stopped being
     // an instant kill.
-    sender: Arc<spsc::Sender<ResponseResult>>,
+    sender: mpsc::Sender<ResponseResult>,
 }
 
 impl Request {
@@ -47,7 +47,7 @@ impl Request {
     pub fn new(
         tag: usize,
         messages: RequestMessages,
-        sender: Arc<spsc::Sender<ResponseResult>>,
+        sender: mpsc::Sender<ResponseResult>,
     ) -> Request {
         Request {
             tag,
@@ -59,7 +59,7 @@ impl Request {
 
 pub struct Response {
     tag: usize,
-    tx: Arc<spsc::Sender<ResponseResult>>,
+    tx: mpsc::Sender<ResponseResult>,
 }
 
 /// Asynchronous notifications delivered by the server: a queue the connection
@@ -375,7 +375,16 @@ fn connection_loop(
         process_req(req_queue, rsp_queue, &mut write_buf, &mut pending_copy_in)
             .map_err(Error::io)?;
         // An in-flight copy may have had more data queued since the last pass.
+        let copying = pending_copy_in.is_some();
         drain_copy_in(&mut pending_copy_in, &mut write_buf);
+        if copying && pending_copy_in.is_none() {
+            // The copy ended on this pass. Requests queued behind it were held back above, and
+            // their wake-up has been spent: send them now, or they wait for unrelated socket
+            // activity (forever, when the copy never started and the server has nothing more
+            // to say).
+            process_req(req_queue, rsp_queue, &mut write_buf, &mut pending_copy_in)
+                .map_err(Error::io)?;
+        }
         match stream.tls.as_deref_mut() {
             None => nonblock_write(inner_stream, &mut write_buf).map(|_| ()),
             Some(conn) => tls_write(conn, inner_stream, &mut write_buf),
