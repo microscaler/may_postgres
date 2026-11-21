@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use may_postgres::config::{Config, TargetSessionAttrs};
+use may_postgres::config::{Config, SslMode, TargetSessionAttrs};
 
 fn check(s: &str, config: &Config) {
     assert_eq!(s.parse::<Config>().expect(s), *config, "`{}`", s);
@@ -28,11 +28,12 @@ fn pairs_ws() {
 #[test]
 fn settings() {
     check(
-        "connect_timeout=3 keepalives=0 keepalives_idle=30 target_session_attrs=read-write",
+        "connect_timeout=3 keepalives=0 keepalives_idle=30 sslmode=disable target_session_attrs=read-write",
         Config::new()
             .connect_timeout(Duration::from_secs(3))
             .keepalives(false)
             .keepalives_idle(Duration::from_secs(30))
+            .ssl_mode(SslMode::Disable)
             .target_session_attrs(TargetSessionAttrs::ReadWrite),
     );
 }
@@ -65,14 +66,15 @@ fn url() {
             .port(5432),
     );
     check(
-        "postgresql://other@localhost/otherdb?connect_timeout=10&application_name=myapp",
+        "postgresql://other@localhost/otherdb?connect_timeout=10&application_name=myapp&sslmode=disable",
         Config::new()
             .user("other")
             .host("localhost")
             .port(5432)
             .dbname("otherdb")
             .connect_timeout(Duration::from_secs(10))
-            .application_name("myapp"),
+            .application_name("myapp")
+            .ssl_mode(SslMode::Disable),
     );
     check(
         "postgresql://host1:123,host2:456/somedb?target_session_attrs=any&application_name=myapp",
@@ -118,4 +120,21 @@ fn url() {
             .port(5432)
             .dbname("dbname"),
     )
+}
+
+#[test]
+fn ssl_modes() {
+    for (mode, want) in [
+        ("disable", SslMode::Disable),
+        ("prefer", SslMode::Prefer),
+        ("require", SslMode::Require),
+        ("verify-ca", SslMode::VerifyCa),
+        ("verify-full", SslMode::VerifyFull),
+    ] {
+        let url = format!("postgresql://localhost/postgres?sslmode={mode}");
+        assert_eq!(url.parse::<Config>().unwrap().get_ssl_mode(), want, "{url}");
+    }
+    assert!("postgresql://localhost/postgres?sslmode=invalid"
+        .parse::<Config>()
+        .is_err());
 }

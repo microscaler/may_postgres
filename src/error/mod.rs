@@ -341,7 +341,7 @@ pub enum ErrorPosition {
 enum Kind {
     Io,
     UnexpectedMessage,
-    // Tls,
+    Tls,
     ToSql(usize),
     FromSql(usize),
     Column(String),
@@ -380,7 +380,7 @@ impl fmt::Display for Error {
         match &self.0.kind {
             Kind::Io => fmt.write_str("error communicating with the server")?,
             Kind::UnexpectedMessage => fmt.write_str("unexpected message from server")?,
-            // Kind::Tls => fmt.write_str("error performing TLS handshake")?,
+            Kind::Tls => fmt.write_str("error performing TLS handshake")?,
             Kind::ToSql(idx) => write!(fmt, "error serializing parameter {}", idx)?,
             Kind::FromSql(idx) => write!(fmt, "error deserializing column {}", idx)?,
             Kind::Column(column) => write!(fmt, "invalid column `{}`", column)?,
@@ -481,9 +481,9 @@ impl Error {
     //     Error::new(Kind::Parameters(real, expected), None)
     // }
 
-    // pub(crate) fn tls(e: Box<dyn error::Error + Sync + Send>) -> Error {
-    //     Error::new(Kind::Tls, Some(e))
-    // }
+    pub(crate) fn tls(e: Box<dyn error::Error + Sync + Send>) -> Error {
+        Error::new(Kind::Tls, Some(e))
+    }
 
     pub(crate) fn io(e: io::Error) -> Error {
         Error::new(Kind::Io, Some(Box::new(e)))
@@ -512,5 +512,14 @@ impl Error {
     #[doc(hidden)]
     pub fn __private_api_timeout() -> Error {
         Error::new(Kind::Timeout, None)
+    }
+
+    /// Application-level failure converting a successfully-read column value (e.g. malformed JSON
+    /// in a `TEXT` / `JSON` column). Surfaced as [`Kind::FromSql`] for `column_index`.
+    pub fn user_column_decode_failed(column_index: usize, message: String) -> Error {
+        Error::from_sql(
+            Box::new(io::Error::new(io::ErrorKind::InvalidData, message)),
+            column_index,
+        )
     }
 }
