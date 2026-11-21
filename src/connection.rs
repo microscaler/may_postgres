@@ -5,7 +5,7 @@ use may::coroutine::JoinHandle;
 use may::go;
 use may::io::{WaitIo, WaitIoWaker};
 use may::queue::mpsc::Queue;
-use may::sync::{spsc, Semphore};
+use may::sync::{mpsc, Semphore};
 use postgres_protocol::message::backend::Message;
 use postgres_protocol::message::frontend;
 
@@ -39,7 +39,7 @@ pub struct Request {
     // the queues after the originating Client is dropped, so a borrow here
     // would dangle into freed Client memory the moment drop stopped being
     // an instant kill.
-    sender: Arc<spsc::Sender<ResponseResult>>,
+    sender: mpsc::Sender<ResponseResult>,
 }
 
 impl Request {
@@ -47,7 +47,7 @@ impl Request {
     pub fn new(
         tag: usize,
         messages: RequestMessages,
-        sender: Arc<spsc::Sender<ResponseResult>>,
+        sender: mpsc::Sender<ResponseResult>,
     ) -> Request {
         Request {
             tag,
@@ -59,7 +59,7 @@ impl Request {
 
 pub struct Response {
     tag: usize,
-    tx: Arc<spsc::Sender<ResponseResult>>,
+    tx: mpsc::Sender<ResponseResult>,
 }
 
 /// Asynchronous notifications delivered by the server: a queue the connection
